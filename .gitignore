@@ -1,0 +1,26 @@
+# Dependencies
+/node_modules
+package-lock.json
+
+# Environment variables (passwords, JWT secret)
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor settings
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Test coverage / build output (for later)
+coverage/
+dist/

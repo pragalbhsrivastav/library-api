@@ -1,0 +1,367 @@
+@baseUrl = http://localhost:8080
+
+# How to use:
+# 1. Send "Login as member" and "Login as admin" first. They save the tokens.
+# 2. Then send any request below. The tokens are filled in automatically.
+# 3. Tokens expire after 1 hour. If you get 401 "Invalid or expired token",
+#    just send the two login requests again.
+
+@memberToken = {{login.response.body.$.token}}
+@adminToken = {{adminLogin.response.body.$.token}}
+
+
+###############################################################
+# AUTH
+###############################################################
+
+### Register (expect 201, or 409 if the email already exists)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "a@x.com",
+  "password": "password123"
+}
+
+### Login as member (send this first, it saves the member token)
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "a@x.com",
+  "password": "password123"
+}
+
+### Login as admin (send this first, it saves the admin token)
+# @name adminLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@x.com",
+  "password": "password123"
+}
+
+### Login, wrong password (expect 401)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "a@x.com",
+  "password": "wrongpassword"
+}
+
+### Me, valid token (expect 200)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{memberToken}}
+
+### Me, no header (expect 401)
+GET {{baseUrl}}/auth/me
+
+### Me, garbage token (expect 401)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer garbage
+
+### Admin only, member token (expect 403)
+GET {{baseUrl}}/auth/admin-only
+Authorization: Bearer {{memberToken}}
+
+### Admin only, admin token (expect 200)
+GET {{baseUrl}}/auth/admin-only
+Authorization: Bearer {{adminToken}}
+
+
+###############################################################
+# AUTHORS
+###############################################################
+
+### Get all authors (expect 200, no token needed)
+GET {{baseUrl}}/authors
+
+### Create author, admin (expect 201, sending it again gives 409)
+# @name createAuthor
+POST {{baseUrl}}/authors/create
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "name": "George Orwell",
+  "nationality": "British",
+  "birth_year": 1903
+}
+
+### Create author, member token (expect 403)
+POST {{baseUrl}}/authors/create
+Content-Type: application/json
+Authorization: Bearer {{memberToken}}
+
+{
+  "name": "Member Author",
+  "nationality": "India",
+  "birth_year": 1950
+}
+
+### Create author, no token (expect 401)
+POST {{baseUrl}}/authors/create
+Content-Type: application/json
+
+{
+  "name": "No Token Author",
+  "nationality": "India"
+}
+
+### Create author, invalid body (expect 400)
+POST {{baseUrl}}/authors/create
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "name": "Al",
+  "nationality": "India",
+  "birth_year": 3000
+}
+
+### Get author created above (expect 200, send "Create author, admin" first)
+GET {{baseUrl}}/authors/{{createAuthor.response.body.$.author.id}}
+
+### Get author, does not exist (expect 404)
+GET {{baseUrl}}/authors/99999
+
+### Get author, invalid id (expect 400)
+GET {{baseUrl}}/authors/abc
+
+### Update author created above (expect 200)
+PUT {{baseUrl}}/authors/{{createAuthor.response.body.$.author.id}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "name": "George Orwell",
+  "nationality": "British (born in India)",
+  "birth_year": 1903
+}
+
+### Delete author created above (expect 200, sending it again gives 404)
+DELETE {{baseUrl}}/authors/{{createAuthor.response.body.$.author.id}}
+Authorization: Bearer {{adminToken}}
+
+### Delete author, member token (expect 403)
+DELETE {{baseUrl}}/authors/99999
+Authorization: Bearer {{memberToken}}
+
+
+###############################################################
+# BOOKS
+# Run in this order: "Create author for books" -> "Create book"
+# -> the rest. Cleanup at the end deletes the book, then the author.
+###############################################################
+
+### Create author for books (expect 201, saves the author id)
+# @name bookAuthor
+POST {{baseUrl}}/authors/create
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "name": "Premchand",
+  "nationality": "Indian",
+  "birth_year": 1880
+}
+
+### Create book, admin (expect 201, saves the book id)
+# @name createBook
+POST {{baseUrl}}/books
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "title": "Godaan",
+  "published_year": 1936,
+  "author_id": {{bookAuthor.response.body.$.author.id}},
+  "total_copies": 3
+}
+
+### Create book, no published_year and total_copies (expect 201, total_copies defaults to 1)
+# @name createBookMinimal
+POST {{baseUrl}}/books
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "title": "Nirmala",
+  "author_id": {{bookAuthor.response.body.$.author.id}}
+}
+
+### Create book, member token (expect 403)
+POST {{baseUrl}}/books
+Content-Type: application/json
+Authorization: Bearer {{memberToken}}
+
+{
+  "title": "Member Book",
+  "author_id": 1
+}
+
+### Create book, no token (expect 401)
+POST {{baseUrl}}/books
+Content-Type: application/json
+
+{
+  "title": "No Token Book",
+  "author_id": 1
+}
+
+### Create book, invalid body (expect 400)
+POST {{baseUrl}}/books
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "title": "",
+  "author_id": 1,
+  "total_copies": 0
+}
+
+### Create book, author does not exist (expect 400 "Author does not exist")
+POST {{baseUrl}}/books
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "title": "Orphan Book",
+  "author_id": 99999
+}
+
+### Get all books (expect 200, default page 1, limit 10)
+GET {{baseUrl}}/books
+
+### Get books, page 1 with 5 per page
+GET {{baseUrl}}/books?page=1&limit=5
+
+### Get books, search by title
+GET {{baseUrl}}/books?title=godaan
+
+### Get books, search by author name
+GET {{baseUrl}}/books?author=premchand
+
+### Get books, sorted by published_year, newest first
+GET {{baseUrl}}/books?sort=published_year&order=desc
+
+### Get books, invalid query (expect 400)
+GET {{baseUrl}}/books?limit=500&sort=price
+
+### Get book created above (expect 200)
+GET {{baseUrl}}/books/{{createBook.response.body.$.book.id}}
+
+### Get book, does not exist (expect 404)
+GET {{baseUrl}}/books/99999
+
+### Get book, invalid id (expect 400)
+GET {{baseUrl}}/books/abc
+
+### Update book created above (expect 200, available_copies also goes up by 2)
+PUT {{baseUrl}}/books/{{createBook.response.body.$.book.id}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "title": "Godaan (Revised)",
+  "published_year": 1936,
+  "author_id": {{bookAuthor.response.body.$.author.id}},
+  "total_copies": 5
+}
+
+### Update book, member token (expect 403)
+PUT {{baseUrl}}/books/{{createBook.response.body.$.book.id}}
+Content-Type: application/json
+Authorization: Bearer {{memberToken}}
+
+{
+  "title": "Hacked",
+  "author_id": 1,
+  "total_copies": 1
+}
+
+### Delete author that still has books (expect 409 "Author has books and cannot be deleted")
+DELETE {{baseUrl}}/authors/{{bookAuthor.response.body.$.author.id}}
+Authorization: Bearer {{adminToken}}
+
+### Delete book, member token (expect 403)
+DELETE {{baseUrl}}/books/{{createBook.response.body.$.book.id}}
+Authorization: Bearer {{memberToken}}
+
+### Cleanup 1: delete book created above (expect 200, again gives 404)
+DELETE {{baseUrl}}/books/{{createBook.response.body.$.book.id}}
+Authorization: Bearer {{adminToken}}
+
+### Cleanup 2: delete the minimal book (expect 200)
+DELETE {{baseUrl}}/books/{{createBookMinimal.response.body.$.book.id}}
+Authorization: Bearer {{adminToken}}
+
+### Cleanup 3: delete the author, now it has no books (expect 200)
+DELETE {{baseUrl}}/authors/{{bookAuthor.response.body.$.author.id}}
+Authorization: Bearer {{adminToken}}
+
+
+###############################################################
+# OTHER
+###############################################################
+
+### Unknown route (expect 404 "Route not found")
+GET {{baseUrl}}/test
+
+
+
+@bookId = 1
+@outOfStockBookId = 4
+
+### Login as member1 (send first, it saves the token)
+# @name member1Login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "member1@x.com",
+  "password": "password123"
+}
+
+### Login as member2
+# @name member2Login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "member2@x.com",
+  "password": "password123"
+}
+
+### List books, check available_copies before and after
+GET {{baseUrl}}/books
+
+### Borrow as member1 (expect 201)
+POST {{baseUrl}}/books/{{bookId}}/borrow
+Authorization: Bearer {{member1Login.response.body.$.token}}
+
+### Borrow the same book again as member1 (expect 409, copies must NOT drop)
+POST {{baseUrl}}/books/{{bookId}}/borrow
+Authorization: Bearer {{member1Login.response.body.$.token}}
+
+### Borrow the same book as member2 (expect 201)
+POST {{baseUrl}}/books/{{bookId}}/borrow
+Authorization: Bearer {{member2Login.response.body.$.token}}
+
+### Borrow a book with 0 copies (expect 409)
+POST {{baseUrl}}/books/{{outOfStockBookId}}/borrow
+Authorization: Bearer {{member1Login.response.body.$.token}}
+
+### Borrow a book that does not exist (expect 409, or 404 if you added the upgrade)
+POST {{baseUrl}}/books/9999/borrow
+Authorization: Bearer {{member1Login.response.body.$.token}}
+
+### Borrow with no token (expect 401)
+POST {{baseUrl}}/books/{{bookId}}/borrow
+
+### Borrow with an invalid id (expect 400)
+POST {{baseUrl}}/books/abc/borrow
+Authorization: Bearer {{member1Login.response.body.$.token}}
